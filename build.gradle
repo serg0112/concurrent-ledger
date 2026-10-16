@@ -1,0 +1,46 @@
+// The application plugin supplies run and distribution tasks; the entry class is configured below.
+plugins {
+    id 'application'
+}
+
+group = 'dev.ledger'
+version = '1.0.0'
+
+repositories { mavenCentral() }
+
+// Use the same JDK generation for compilation, tests and the executable service.
+java { toolchain { languageVersion = JavaLanguageVersion.of(25) } }
+
+// HTTP/JSON and Jakarta constraints belong to adapters; the ledger core uses only the JDK.
+dependencies {
+    implementation 'io.javalin:javalin:7.2.3'
+    implementation 'com.google.code.gson:gson:2.13.2'
+    implementation 'jakarta.validation:jakarta.validation-api:3.1.1'
+    // Keep the validation provider and EL interpolation implementation behind the standard Jakarta API.
+    runtimeOnly 'org.hibernate.validator:hibernate-validator:9.1.5.Final'
+    runtimeOnly 'org.glassfish.expressly:expressly:6.0.0'
+    // Bridge framework logs into the JVM logging backend used by System.Logger.
+    runtimeOnly 'org.slf4j:slf4j-jdk14:2.0.18'
+    // Align JUnit modules; the launcher is also compiled against by the isolated test runner.
+    testImplementation platform('org.junit:junit-bom:5.13.4')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testImplementation 'org.junit.platform:junit-platform-launcher'
+}
+
+// Keep run and generated distribution launchers pointed at the application entry point.
+application { mainClass = 'dev.ledger.LedgerApplication' }
+
+// --release fixes the minimum runtime API level; UTF-8 keeps request/test fixtures portable.
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.release = 25
+}
+
+// Child-only scenarios are launched by bounded parent tests, not discovered again inside the Gradle worker.
+test {
+    useJUnitPlatform { excludeTags 'child-jvm' }
+    // Gradle's worker java.class.path is not the complete test runtime classpath.
+    systemProperty 'ledger.test.classpath', sourceSets.test.runtimeClasspath.asPath
+    // Report individual outcomes while the parent harness includes child output only when a scenario fails.
+    testLogging { events 'passed', 'skipped', 'failed' }
+}

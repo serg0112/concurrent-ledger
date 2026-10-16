@@ -1,0 +1,3 @@
+package dev.ledger.domain;
+
+public enum Status { POSTED, INVALID_TRANSFER, ACCOUNT_NOT_FOUND, INSUFFICIENT_FUNDS, BALANCE_OVERFLOW }

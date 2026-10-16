@@ -1,0 +1,59 @@
+// Run top to bottom against a fresh in-memory service; amounts are integer minor units.
+// See REQUIREMENTS.md for the startup configuration gap before using these requests.
+// Repeating only the transfer is safe. Re-running all requests creates new wallets: restart the service
+// or choose fresh keys, because existing keys remain bound to their original account IDs for this process.
+@baseUrl = http://127.0.0.1:8080
+
+### Create a funded wallet
+// Opening funds are external issuance; the response handler saves the UUID for subsequent requests.
+POST {{baseUrl}}/accounts
+Content-Type: application/json
+
+{"initialBalance": 1000}
+
+> {% client.global.set("source", response.body.id); %}
+
+### Create an empty wallet
+// Omitted initialBalance defaults to zero; explicit null is invalid. Save the destination UUID from the response.
+POST {{baseUrl}}/accounts
+Content-Type: application/json
+
+{}
+
+> {% client.global.set("destination", response.body.id); %}
+
+### Transfer (repeat this request to see the identical original outcome)
+// Both accounts change atomically. Repeat with this SAME key and body to retrieve the original result.
+POST {{baseUrl}}/transfers
+Content-Type: application/json
+Idempotency-Key: review-payment-1
+
+{"fromAccountId": "{{source}}", "toAccountId": "{{destination}}", "amount": 250}
+
+### Source balance: 750
+// These are two separate account snapshots; the API does not provide a global multi-account snapshot.
+GET {{baseUrl}}/accounts/{{source}}/balance
+
+### Destination balance: 250
+// The successful transfer credits 250 exactly once, even after equal-key retries.
+GET {{baseUrl}}/accounts/{{destination}}/balance
+
+### Source journal: opening funding plus transfer
+// Two balanced transactions should appear: opening issuance, followed by the one posted transfer.
+GET {{baseUrl}}/accounts/{{source}}/entries
+
+### Conflicting key reuse: 409
+// Changing amount under a reserved key cannot create a new command; expect HTTP 409.
+POST {{baseUrl}}/transfers
+Content-Type: application/json
+Idempotency-Key: review-payment-1
+
+{"fromAccountId": "{{source}}", "toAccountId": "{{destination}}", "amount": 251}
+
+### Insufficient funds: 422, remembered on retry
+// This well-formed request reaches the ledger and reserves its rejected outcome; use a new key for a new attempt.
+POST {{baseUrl}}/transfers
+Content-Type: application/json
+Idempotency-Key: review-insufficient-1
+
+{"fromAccountId": "{{source}}", "toAccountId": "{{destination}}", "amount": 10000}

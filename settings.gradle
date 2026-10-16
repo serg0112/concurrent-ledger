@@ -1,0 +1,2 @@
+// A stable project name also determines the application distribution and launcher names.
+rootProject.name = 'concurrent-ledger'
